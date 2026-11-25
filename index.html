@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clear Scan – Document Scanner</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Clear Scan">
+<meta name="theme-color" content="#0e1013">
+<style>
+:root{--bg:#0e1013;--panel:#171a1f;--line:#272b33;--tx:#eef0f2;--mut:#98a0ab;--ac:#35d0b4;--acx:#04251f}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.hidden{display:none!important}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+header{padding:14px 18px 8px}
+header h1{margin:0;font-size:22px;letter-spacing:-.01em}
+header p{margin:4px 0 0;color:var(--mut);font-size:13.5px}
+.scroll{flex:1;overflow:auto;padding:8px 14px 16px}
+.empty{margin:28px 6px;padding:22px;border:1px dashed var(--line);border-radius:16px;color:var(--mut);font-size:14.5px}
+.empty b{color:var(--tx)}
+.empty ol{margin:10px 0 0;padding-left:20px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.card img{display:block;width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff}
+.card .num{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.65);padding:1px 9px;border-radius:99px;font-size:13px}
+.card .bar{display:flex;justify-content:space-between;padding:2px 4px}
+.card .bar button{padding:8px 12px;font-size:18px;color:var(--mut)}
+.card .bar button:disabled{opacity:.25}
+.opts{display:flex;gap:10px;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel)}
+.opts label{flex:1;font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:4px}
+select{font:inherit;font-size:15px;color:var(--tx);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px}
+.actions{display:flex;gap:10px;padding:10px 14px 14px;background:var(--panel)}
+.btn{flex:1;padding:14px 10px;border-radius:14px;background:#252a32;font-weight:600;text-align:center;font-size:15px}
+.btn.pri{background:var(--ac);color:var(--acx)}
+.btn:disabled{opacity:.35}
+/* editor */
+.top{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;gap:8px}
+.top .t{font-weight:600;font-size:15px}
+.top button{padding:9px 14px;border-radius:12px;font-weight:600;font-size:15px}
+.top .go{background:var(--ac);color:var(--acx)}
+.top .bk{color:var(--mut)}
+#stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;padding:10px;overflow:hidden}
+#wrap{position:relative;touch-action:none;box-shadow:0 0 0 1px #333}
+#wrap canvas.src{display:block;width:100%;height:100%}
+#ov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hd{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;border:3px solid var(--ac);background:rgba(53,208,180,.18);touch-action:none}
+#loupe{position:absolute;top:10px;width:120px;height:120px;border-radius:14px;border:2px solid var(--ac);background:#000;pointer-events:none;z-index:5}
+#pv{max-width:100%;max-height:100%;background:#fff;box-shadow:0 2px 18px rgba(0,0,0,.5)}
+.ctl{display:flex;gap:8px;padding:10px 12px 12px;overflow-x:auto;background:var(--panel);border-top:1px solid var(--line)}
+.chip{flex:none;padding:10px 14px;border-radius:99px;background:#252a32;font-size:14.5px;white-space:nowrap}
+.chip.on{background:var(--ac);color:var(--acx);font-weight:600}
+#busy{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:50}
+#busy div{background:var(--panel);padding:18px 24px;border-radius:14px;border:1px solid var(--line)}
+#done{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:70}
+#done .sheet{width:100%;max-width:480px;background:var(--panel);border-radius:20px 20px 0 0;padding:20px 18px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+#done h2{margin:0;font-size:18px}
+#done p{margin:0 0 4px;color:var(--mut);font-size:14px}
+#imgs{position:fixed;inset:0;background:#000;z-index:80;overflow:auto;padding:env(safe-area-inset-top) 12px calc(20px + env(safe-area-inset-bottom))}
+#imgs p{color:var(--mut);font-size:14px;margin:14px 4px}
+#imgs img{display:block;width:100%;margin:0 0 14px;background:#fff;border-radius:6px;-webkit-touch-callout:default}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#333;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:88vw;text-align:center;z-index:60}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="home" class="screen">
+  <header>
+    <h1>Clear Scan</h1>
+    <p>Full-resolution document scans to PDF. Opens your iPhone's own Camera, so no preview-quality or app compression.</p>
+  </header>
+  <div class="scroll">
+    <div id="empty" class="empty">
+      <b>How to get a sharp scan</b>
+      <ol>
+        <li>Tap <b>Scan</b> and take the photo with the normal Camera (good light, hold steady, page flat).</li>
+        <li>Drag the 4 corners to the page edges. Auto-detect gets close.</li>
+        <li>Pick Color, Grayscale or B&amp;W, save the page, repeat, then export the PDF.</li>
+      </ol>
+    </div>
+    <div id="grid" class="grid"></div>
+  </div>
+  <div class="opts">
+    <label>Quality (applies to newly saved pages)
+      <select id="q"><option value="max">Max – 300 dpi</option><option value="high" selected>High – 210 dpi</option><option value="small">Small file – 150 dpi</option></select>
+    </label>
+    <label>PDF page size
+      <select id="ps"><option value="fit">Fit to scan</option><option value="a4">A4</option></select>
+    </label>
+  </div>
+  <div class="actions">
+    <button class="btn pri" id="bScan">📷 Scan</button>
+    <button class="btn" id="bLib">🖼 Photos</button>
+    <button class="btn" id="bPdf" disabled>⬇ PDF</button>
+  </div>
+</div>
+
+<div id="editor" class="screen hidden">
+  <div class="top">
+    <button class="bk" id="eBack">‹ Back</button>
+    <div class="t" id="eTitle">Crop</div>
+    <button class="go" id="eNext">Next</button>
+  </div>
+  <div id="stage">
+    <div id="wrap">
+      <svg id="ov"><polygon id="poly" fill="rgba(53,208,180,.12)" stroke="#35d0b4" stroke-width="2"/></svg>
+    </div>
+    <canvas id="pv" class="hidden"></canvas>
+    <canvas id="loupe" width="120" height="120" class="hidden"></canvas>
+  </div>
+  <div class="ctl" id="cropCtl">
+    <button class="chip" id="bAuto">Auto-detect</button>
+    <button class="chip" id="bFull">Full photo</button>
+  </div>
+  <div class="ctl hidden" id="prevCtl">
+    <button class="chip" data-m="original">Original</button>
+    <button class="chip on" data-m="color">Color</button>
+    <button class="chip" data-m="gray">Grayscale</button>
+    <button class="chip" data-m="bw">B&amp;W</button>
+    <button class="chip" id="bRot">⟳ Rotate</button>
+  </div>
+</div>
+
+<div id="busy" class="hidden"><div id="busyMsg">Working…</div></div>
+<div id="done" class="hidden"><div class="sheet">
+  <h2>PDF ready</h2><p id="doneInfo"></p>
+  <button class="btn pri" id="bShare">Save to Files / Share</button>
+  <button class="btn" id="bDl">Download</button>
+  <button class="btn" id="bImg">Show pages as images (press &amp; hold to save)</button>
+  <button class="btn" id="bClose">Close</button>
+</div></div>
+<div id="imgs" class="hidden"><button class="btn" id="bImgClose">‹ Back</button><p>Press and hold an image, then choose Save to Photos or Share.</p><div id="imgList"></div></div>
+<div id="toast"></div>
+<input type="file" id="camIn" accept="image/*" capture="environment" class="hidden">
+<input type="file" id="libIn" accept="image/*" multiple class="hidden">
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const MAXSRC=4000;
+const QS={max:{side:3508,q:.92},high:{side:2480,q:.88},small:{side:1754,q:.8}};
+let pages=[],queue=[],ed=null;
+const tick=()=>new Promise(r=>setTimeout(r,30));
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const mk=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c;};
+const toBlob=(cv,t,q)=>new Promise(r=>cv.toBlob(r,t,q));
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),3000);}
+function busy(on,msg){$('#busy').classList.toggle('hidden',!on);if(msg)$('#busyMsg').textContent=msg;}
+
+/* ---------- image loading ---------- */
+async function fileToCanvas(blob){
+  const url=URL.createObjectURL(blob);
+  try{
+    const img=new Image();img.src=url;
+    await img.decode();
+    const s=Math.min(1,MAXSRC/Math.max(img.naturalWidth,img.naturalHeight));
+    const c=mk(Math.round(img.naturalWidth*s),Math.round(img.naturalHeight*s));
+    const x=c.getContext('2d');x.imageSmoothingQuality='high';
+    x.drawImage(img,0,0,c.width,c.height);
+    return c;
+  }finally{URL.revokeObjectURL(url);}
+}
+
+/* ---------- auto-detect page corners (bright page on darker surface) ---------- */
+function detectQuad(src){
+  const fallback=()=>{const m=.06,W=src.width,H=src.height;return [{x:W*m,y:H*m},{x:W*(1-m),y:H*m},{x:W*(1-m),y:H*(1-m)},{x:W*m,y:H*(1-m)}];};
+  try{
+    const sc=Math.min(1,300/Math.max(src.width,src.height));
+    const w=Math.max(8,Math.round(src.width*sc)),h=Math.max(8,Math.round(src.height*sc));
+    const c=mk(w,h),x=c.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,w,h);
+    const d=x.getImageData(0,0,w,h).data,n=w*h,g=new Uint8Array(n),hist=new Array(256).fill(0);
+    for(let i=0;i<n;i++){const v=(d[i*4]*.299+d[i*4+1]*.587+d[i*4+2]*.114)|0;g[i]=v;hist[v]++;}
+    let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];
+    let wB=0,sB=0,best=-1,th=128;
+    for(let t=0;t<256;t++){wB+=hist[t];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=t*hist[t];
+      const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>best){best=v;th=t;}}
+    const lab=new Uint8Array(n),stack=new Int32Array(n);
+    let bestA=0,bp=null;
+    for(let s0=0;s0<n;s0++){
+      if(lab[s0]||g[s0]<=th)continue;
+      let sp=0,area=0;stack[sp++]=s0;lab[s0]=1;
+      let tl=1e9,br=-1e9,tr=-1e9,bl=1e9,ptl,pbr,ptr,pbl;
+      while(sp){const p=stack[--sp],px=p%w,py=(p/w)|0;area++;
+        const a=px+py,b=px-py;
+        if(a<tl){tl=a;ptl={x:px,y:py};}if(a>br){br=a;pbr={x:px,y:py};}
+        if(b>tr){tr=b;ptr={x:px,y:py};}if(b<bl){bl=b;pbl={x:px,y:py};}
+        if(px>0&&!lab[p-1]&&g[p-1]>th){lab[p-1]=1;stack[sp++]=p-1;}
+        if(px<w-1&&!lab[p+1]&&g[p+1]>th){lab[p+1]=1;stack[sp++]=p+1;}
+        if(py>0&&!lab[p-w]&&g[p-w]>th){lab[p-w]=1;stack[sp++]=p-w;}
+        if(py<h-1&&!lab[p+w]&&g[p+w]>th){lab[p+w]=1;stack[sp++]=p+w;}
+      }
+      if(area>bestA){bestA=area;bp=[ptl,ptr,pbr,pbl];}
+    }
+    const r=bestA/n;
+    if(!bp||r<.15||r>.9)return fallback();
+    return bp.map(p=>({x:p.x/sc,y:p.y/sc}));
+  }catch(e){return fallback();}
+}
+
+/* ---------- perspective warp ---------- */
+function homography(ow,oh,c){
+  const dst=[[0,0],[ow-1,0],[ow-1,oh-1],[0,oh-1]],A=[],b=[];
+  for(let i=0;i<4;i++){const [u,v]=dst[i],x=c[i].x,y=c[i].y;
+    A.push([u,v,1,0,0,0,-x*u,-x*v]);b.push(x);
+    A.push([0,0,0,u,v,1,-y*u,-y*v]);b.push(y);}
+  const n=8;
+  for(let i=0;i<n;i++){
+    let p=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[p][i]))p=r;
+    [A[i],A[p]]=[A[p],A[i]];[b[i],b[p]]=[b[p],b[i]];
+    const dg=A[i][i]||1e-9;
+    for(let r=i+1;r<n;r++){const f=A[r][i]/dg;if(!f)continue;for(let k=i;k<n;k++)A[r][k]-=f*A[i][k];b[r]-=f*b[i];}
+  }
+  const h=new Array(n);
+  for(let i=n-1;i>=0;i--){let s=b[i];for(let k=i+1;k<n;k++)s-=A[i][k]*h[k];h[i]=s/(A[i][i]||1e-9);}
+  return h;
+}
+function warp(sd,c,maxSide){
+  const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const W=Math.max(d(c[0],c[1]),d(c[3],c[2])),H=Math.max(d(c[0],c[3]),d(c[1],c[2]));
+  const s=Math.min(1,maxSide/Math.max(W,H));
+  const ow=Math.max(2,Math.round(W*s)),oh=Math.max(2,Math.round(H*s));
+  const h=homography(ow,oh,c),sw=sd.width,sh=sd.height,S=sd.data;
+  const out=new ImageData(ow,oh),o=out.data;
+  const mx=sw-1.001,my=sh-1.001;
+  let q=0;
+  for(let y=0;y<oh;y++){
+    for(let x=0;x<ow;x++){
+      const den=h[6]*x+h[7]*y+1;
+      let sx=(h[0]*x+h[1]*y+h[2])/den,sy=(h[3]*x+h[4]*y+h[5])/den;
+      sx=sx<0?0:sx>mx?mx:sx;sy=sy<0?0:sy>my?my:sy;
+      const x0=sx|0,y0=sy|0,fx=sx-x0,fy=sy-y0;
+      const i0=(y0*sw+x0)*4,i1=i0+4,i2=i0+sw*4,i3=i2+4;
+      const w0=(1-fx)*(1-fy),w1=fx*(1-fy),w2=(1-fx)*fy,w3=fx*fy;
+      o[q]=S[i0]*w0+S[i1]*w1+S[i2]*w2+S[i3]*w3;
+      o[q+1]=S[i0+1]*w0+S[i1+1]*w1+S[i2+1]*w2+S[i3+1]*w3;
+      o[q+2]=S[i0+2]*w0+S[i1+2]*w1+S[i2+2]*w2+S[i3+2]*w3;
+      o[q+3]=255;q+=4;
+    }
+  }
+  const cv=mk(ow,oh);cv.getContext('2d').putImageData(out,0,0);return cv;
+}
+function rotate(cv,deg){
+  if(!deg)return cv;
+  const sw=deg%180?cv.height:cv.width,sh=deg%180?cv.width:cv.height,r=mk(sw,sh),x=r.getContext('2d');
+  x.translate(sw/2,sh/2);x.rotate(deg*Math.PI/180);x.drawImage(cv,-cv.width/2,-cv.height/2);return r;
+}
+function clone(cv){const c=mk(cv.width,cv.height);c.getContext('2d').drawImage(cv,0,0);return c;}
+
+/* ---------- enhancement: flatten lighting/shadows, whiten paper ---------- */
+function maxF(a,w,h,r){
+  const t=new Float32Array(a.length),o=new Float32Array(a.length);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let m=0;for(let k=-r;k<=r;k++){const v=a[y*w+clamp(x+k,0,w-1)];if(v>m)m=v;}t[y*w+x]=m;}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let m=0;for(let k=-r;k<=r;k++){const v=t[clamp(y+k,0,h-1)*w+x];if(v>m)m=v;}o[y*w+x]=m;}
+  return o;
+}
+function boxF(a,w,h,r){
+  const t=new Float32Array(a.length),o=new Float32Array(a.length),n=2*r+1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let s=0;for(let k=-r;k<=r;k++)s+=a[y*w+clamp(x+k,0,w-1)];t[y*w+x]=s/n;}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let s=0;for(let k=-r;k<=r;k++)s+=t[clamp(y+k,0,h-1)*w+x];o[y*w+x]=s/n;}
+  return o;
+}
+function enhance(cv,mode){
+  if(mode==='original')return;
+  const w=cv.width,h=cv.height,ctx=cv.getContext('2d',{willReadFrequently:true});
+  const img=ctx.getImageData(0,0,w,h),D=img.data;
+  const B=16,sw=Math.max(4,Math.ceil(w/B)),sh=Math.max(4,Math.ceil(h/B));
+  let L=new Float32Array(sw*sh);
+  for(let cy=0;cy<sh;cy++)for(let cx=0;cx<sw;cx++){
+    let s=0,c=0;
+    for(let y=cy*B;y<Math.min(h,cy*B+B);y+=2)for(let x=cx*B;x<Math.min(w,cx*B+B);x+=2){const p=(y*w+x)*4;s+=D[p]*.299+D[p+1]*.587+D[p+2]*.114;c++;}
+    L[cy*sw+cx]=c?s/c:255;
+  }
+  L=boxF(maxF(L,sw,sh,3),sw,sh,3);
+  const sc=mk(sw,sh),sx=sc.getContext('2d'),sdata=sx.createImageData(sw,sh);
+  for(let i=0;i<sw*sh;i++){const v=L[i];sdata.data[i*4]=sdata.data[i*4+1]=sdata.data[i*4+2]=v;sdata.data[i*4+3]=255;}
+  sx.putImageData(sdata,0,0);
+  const bc=mk(w,h),bx=bc.getContext('2d',{willReadFrequently:true});bx.imageSmoothingEnabled=true;bx.imageSmoothingQuality='high';
+  bx.drawImage(sc,0,0,w,h);
+  const BG=bx.getImageData(0,0,w,h).data,n=w*h;
+  const lo=mode==='color'?22:45,hi=240,k=255/(hi-lo);
+  for(let i=0;i<n;i++){
+    const p=i*4;let g=255/Math.max(BG[p],50);if(g>3)g=3;
+    let R=D[p]*g,G=D[p+1]*g,Bc=D[p+2]*g;
+    if(mode==='color'){
+      R=(R-lo)*k;G=(G-lo)*k;Bc=(Bc-lo)*k;
+    }else{
+      let l=R*.299+G*.587+Bc*.114;
+      if(mode==='gray'){l=(l-lo)*k;}
+      else{let t=(l-115)/70;t=t<0?0:t>1?1:t;l=t*t*(3-2*t)*255;}
+      R=G=Bc=l;
+    }
+    D[p]=R<0?0:R>255?255:R;D[p+1]=G<0?0:G>255?255:G;D[p+2]=Bc<0?0:Bc>255?255:Bc;
+  }
+  ctx.putImageData(img,0,0);
+}
+
+/* ---------- PDF writer (JPEG pages) ---------- */
+async function buildPdf(list,sizeMode){
+  const enc=new TextEncoder(),chunks=[],offs=[];let off=0;
+  const push=d=>{const u=typeof d==='string'?enc.encode(d):d;chunks.push(u);off+=u.length;};
+  const n=list.length,A4W=595.28,A4H=841.89,f=v=>v.toFixed(2);
+  push('%PDF-1.4\n%âãÏÓ\n');
+  offs[1]=off;push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  offs[2]=off;push(`2 0 obj\n<< /Type /Pages /Kids [${list.map((_,i)=>`${3+i*3} 0 R`).join(' ')}] /Count ${n} >>\nendobj\n`);
+  for(let i=0;i<n;i++){
+    const p=list[i],jpg=new Uint8Array(await p.outBlob.arrayBuffer());
+    const po=3+i*3,co=po+1,io=po+2,ratio=p.h/p.w;
+    let pw,ph,iw,ih,ix,iy;
+    if(sizeMode==='a4'){
+      const land=p.w>p.h;pw=land?A4H:A4W;ph=land?A4W:A4H;
+      const s=Math.min(pw/p.w,ph/p.h);iw=p.w*s;ih=p.h*s;ix=(pw-iw)/2;iy=(ph-ih)/2;
+    }else{
+      const land=ratio<1;pw=land?A4H:A4W;ph=pw*ratio;
+      const a4r=A4H/A4W;
+      if(Math.abs((land?1/ratio:ratio)-a4r)<.05)ph=land?A4W:A4H;
+      iw=pw;ih=ph;ix=0;iy=0;
+    }
+    const content=`q ${f(iw)} 0 0 ${f(ih)} ${f(ix)} ${f(iy)} cm /Im0 Do Q`;
+    offs[po]=off;push(`${po} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pw)} ${f(ph)}] /Resources << /XObject << /Im0 ${io} 0 R >> >> /Contents ${co} 0 R >>\nendobj\n`);
+    offs[co]=off;push(`${co} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
+    offs[io]=off;push(`${io} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+    push(jpg);push('\nendstream\nendobj\n');
+  }
+  const total=3+n*3,xref=off;
+  let x=`xref\n0 ${total}\n0000000000 65535 f \n`;
+  for(let i=1;i<total;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  push(x+`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(chunks,{type:'application/pdf'});
+}
+window.__scan={buildPdf,homography,detectQuad};
+
+/* ---------- home ---------- */
+function renderHome(){
+  const g=$('#grid');g.textContent='';
+  pages.forEach((p,i)=>{
+    const c=document.createElement('div');c.className='card';
+    const im=new Image();im.src=p.thumb;im.alt='Page '+(i+1);im.onclick=()=>startEdit(p.srcBlob,p,i);
+    const nm=document.createElement('div');nm.className='num';nm.textContent=String(i+1);
+    const bar=document.createElement('div');bar.className='bar';
+    const mkb=(t,fn,dis)=>{const b=document.createElement('button');b.textContent=t;b.disabled=!!dis;b.onclick=fn;return b;};
+    bar.append(
+      mkb('‹',()=>{[pages[i-1],pages[i]]=[pages[i],pages[i-1]];renderHome();},i===0),
+      mkb('🗑',()=>{pages.splice(i,1);renderHome();}),
+      mkb('›',()=>{[pages[i+1],pages[i]]=[pages[i],pages[i+1]];renderHome();},i===pages.length-1));
+    c.append(im,nm,bar);g.append(c);
+  });
+  $('#empty').classList.toggle('hidden',pages.length>0);
+  $('#bPdf').disabled=!pages.length;
+  $('#bPdf').textContent=pages.length?`⬇ PDF (${pages.length})`:'⬇ PDF';
+}
+function show(id){$('#home').classList.toggle('hidden',id!=='home');$('#editor').classList.toggle('hidden',id!=='editor');}
+function nextInQueue(){
+  if(queue.length)startEdit(queue.shift(),null,null);else{show('home');renderHome();}
+}
+function takeFiles(inp){
+  const fs=[...inp.files];inp.value='';
+  if(!fs.length)return;
+  queue.push(...fs);
+  if($('#editor').classList.contains('hidden'))nextInQueue();
+}
+$('#bScan').onclick=()=>$('#camIn').click();
+$('#bLib').onclick=()=>$('#libIn').click();
+$('#camIn').onchange=e=>takeFiles(e.target);
+$('#libIn').onchange=e=>takeFiles(e.target);
+
+/* ---------- editor ---------- */
+const wrap=$('#wrap'),poly=$('#poly'),loupe=$('#loupe'),pv=$('#pv');
+const handles=[0,1,2,3].map(i=>{
+  const h=document.createElement('div');h.className='hd';wrap.append(h);
+  h.addEventListener('pointerdown',e=>{h.setPointerCapture(e.pointerId);h.drag=true;moveH(i,e);e.preventDefault();});
+  h.addEventListener('pointermove',e=>{if(h.drag)moveH(i,e);});
+  const end=()=>{h.drag=false;loupe.classList.add('hidden');};
+  h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
+  return h;
+});
+function moveH(i,e){
+  const r=wrap.getBoundingClientRect(),s=ed.src;
+  ed.c[i]={x:clamp((e.clientX-r.left)/r.width,0,1)*s.width,y:clamp((e.clientY-r.top)/r.height,0,1)*s.height};
+  drawOv();
+  const reg=Math.max(s.width,s.height)*.06,lx=loupe.getContext('2d'),p=ed.c[i];
+  lx.fillStyle='#000';lx.fillRect(0,0,120,120);
+  lx.drawImage(s,p.x-reg/2,p.y-reg/2,reg,reg,0,0,120,120);
+  lx.strokeStyle='#35d0b4';lx.lineWidth=1;lx.beginPath();lx.moveTo(60,0);lx.lineTo(60,120);lx.moveTo(0,60);lx.lineTo(120,60);lx.stroke();
+  loupe.style.left=(p.x/s.width>.5?'10px':'auto');loupe.style.right=(p.x/s.width>.5?'auto':'10px');
+  loupe.classList.remove('hidden');
+}
+function drawOv(){
+  const k=ed.k;
+  poly.setAttribute('points',ed.c.map(p=>`${p.x*k},${p.y*k}`).join(' '));
+  handles.forEach((h,i)=>{h.style.left=ed.c[i].x*k+'px';h.style.top=ed.c[i].y*k+'px';});
+}
+function layoutCrop(){
+  const st=$('#stage'),s=ed.src;
+  const k=Math.min((st.clientWidth-20)/s.width,(st.clientHeight-20)/s.height);
+  ed.k=k;wrap.style.width=s.width*k+'px';wrap.style.height=s.height*k+'px';
+  drawOv();
+}
+function setStep(step){
+  ed.step=step;const crop=step==='crop';
+  wrap.classList.toggle('hidden',!crop);pv.classList.toggle('hidden',crop);
+  $('#cropCtl').classList.toggle('hidden',!crop);$('#prevCtl').classList.toggle('hidden',crop);
+  $('#eTitle').textContent=crop?'Adjust corners':'Enhance';
+  $('#eNext').textContent=crop?'Next':'Save page';
+  $('#eBack').textContent=crop?'‹ Cancel':'‹ Crop';
+  if(crop)layoutCrop();
+}
+async function startEdit(blob,page,idx){
+  busy(true,'Loading photo…');show('editor');await tick();
+  try{
+    const src=await fileToCanvas(blob);
+    wrap.querySelectorAll('canvas.src').forEach(c=>c.remove());
+    src.className='src';wrap.prepend(src);
+    const c=page?page.corners.map(p=>({x:p.x*src.width,y:p.y*src.height})):detectQuad(src);
+    ed={src,c,mode:page?page.mode:'color',rot:page?page.rot:0,idx,page,sd:null,base:null,k:1,step:'crop'};
+    document.querySelectorAll('#prevCtl [data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===ed.mode));
+    setStep('crop');
+  }catch(e){
+    toast("Couldn't open that photo. Try a JPEG/PNG or take a new one.");nextInQueue();
+  }
+  busy(false);
+}
+function getSD(){if(!ed.sd)ed.sd=ed.src.getContext('2d',{willReadFrequently:true}).getImageData(0,0,ed.src.width,ed.src.height);return ed.sd;}
+function renderPreview(){
+  let cv=ed.rot?rotate(ed.base,ed.rot):clone(ed.base);
+  enhance(cv,ed.mode);
+  pv.width=cv.width;pv.height=cv.height;pv.getContext('2d').drawImage(cv,0,0);
+}
+async function toPreview(){
+  busy(true,'Straightening…');await tick();
+  ed.base=warp(getSD(),ed.c,1100);
+  setStep('preview');renderPreview();busy(false);
+}
+async function savePage(){
+  busy(true,'Processing at full quality…');await tick();
+  try{
+    const qs=QS[$('#q').value];
+    let cv=rotate(warp(getSD(),ed.c,qs.side),ed.rot);
+    enhance(cv,ed.mode);
+    const outBlob=await toBlob(cv,'image/jpeg',qs.q);
+    const tw=300,tc=mk(tw,Math.round(tw*cv.height/cv.width));tc.getContext('2d').drawImage(cv,0,0,tc.width,tc.height);
+    const srcBlob=ed.page?ed.page.srcBlob:await toBlob(ed.src,'image/jpeg',.92);
+    const page={srcBlob,outBlob,w:cv.width,h:cv.height,mode:ed.mode,rot:ed.rot,thumb:tc.toDataURL('image/jpeg',.7),
+      corners:ed.c.map(p=>({x:p.x/ed.src.width,y:p.y/ed.src.height}))};
+    if(ed.idx!=null)pages[ed.idx]=page;else pages.push(page);
+    ed=null;
+    wrap.querySelectorAll('canvas.src').forEach(c=>c.remove());
+    nextInQueue();
+  }catch(e){toast('Something went wrong saving this page.');}
+  busy(false);
+}
+$('#eNext').onclick=()=>ed&&(ed.step==='crop'?toPreview():savePage());
+$('#eBack').onclick=()=>{
+  if(!ed)return;
+  if(ed.step==='preview')setStep('crop');
+  else{ed=null;wrap.querySelectorAll('canvas.src').forEach(c=>c.remove());queue.length=0;show('home');renderHome();}
+};
+$('#bAuto').onclick=()=>{ed.c=detectQuad(ed.src);drawOv();};
+$('#bFull').onclick=()=>{const W=ed.src.width,H=ed.src.height;ed.c=[{x:0,y:0},{x:W,y:0},{x:W,y:H},{x:0,y:H}];drawOv();};
+document.querySelectorAll('#prevCtl [data-m]').forEach(b=>b.onclick=()=>{
+  ed.mode=b.dataset.m;
+  document.querySelectorAll('#prevCtl [data-m]').forEach(x=>x.classList.toggle('on',x===b));
+  renderPreview();
+});
+$('#bRot').onclick=()=>{ed.rot=(ed.rot+90)%360;renderPreview();};
+window.addEventListener('resize',()=>{if(ed&&ed.step==='crop')layoutCrop();});
+
+/* ---------- export ---------- */
+$('#bPdf').onclick=async()=>{
+  if(!pages.length)return;
+  busy(true,'Building PDF…');await tick();
+  let blob;
+  try{blob=await buildPdf(pages,$('#ps').value);}catch(e){busy(false);toast('PDF build failed.');return;}
+  busy(false);
+  const d=new Date(),z=n=>String(n).padStart(2,'0');
+  const name=`scan-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.pdf`;
+  const kb=Math.round(blob.size/1024);
+  $('#doneInfo').textContent=`${name} · ${kb>1024?(kb/1024).toFixed(1)+' MB':kb+' KB'} · ${pages.length} page${pages.length>1?'s':''}`;
+  const file=new File([blob],name,{type:'application/pdf'});
+  const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+  $('#bShare').classList.toggle('hidden',!canShare);
+  $('#bShare').onclick=async()=>{try{await navigator.share({files:[file],title:name});}catch(e){if(e&&e.name!=='AbortError')toast('Share failed, use Download.');}};
+  $('#bDl').onclick=async()=>{
+    try{
+      const dl=window.claude&&claude.use?await claude.use('downloads'):null;
+      if(dl){await dl.save({filename:name,data:blob});toast('Saved');return;}
+    }catch(e){
+      if(e&&e.code==='declined')return;
+      toast('Saving is blocked here ('+((e&&e.code)||'error')+'). Use "Show pages as images".');return;
+    }
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove();
+  };
+  $('#bImg').onclick=()=>{
+    const L=$('#imgList');L.textContent='';
+    pages.forEach((p,i)=>{const im=new Image();im.src=URL.createObjectURL(p.outBlob);im.alt='Page '+(i+1);L.append(im);});
+    $('#imgs').classList.remove('hidden');
+  };
+  $('#bClose').onclick=()=>$('#done').classList.add('hidden');
+  $('#done').classList.remove('hidden');
+};
+$('#bImgClose').onclick=()=>$('#imgs').classList.add('hidden');
+renderHome();
+})();
+</script>
+</body>
+</html>
